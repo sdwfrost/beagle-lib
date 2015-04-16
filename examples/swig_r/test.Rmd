@@ -1,0 +1,97 @@
+I first ran SWIG on the interface file.
+
+```
+swig -r beagle.i
+```
+
+I then compiled the wrapper library.
+
+```
+MAKEFLAGS="CFLAGS=-I/usr/local/include/libhmsbeagle-1" R CMD SHLIB beagle_wrap.c -L/usr/local/lib -lhmsbeagle
+```
+
+I renamed ```beagle.R``` to ```beagle_orig.R```, and search and replaced ", PACKAGE = 'beagle'", as the wrapper code isn't in a package at the moment, generating a new ```beagle.R```. I also had problems as "_p_int" was not a defined class. I simply commented out ```ans <- new("_p_int", ref=ans) ;``` in ```new_intArray```. I'm having problems with some of the array stuff in SWIG.
+
+I now load the wrapper library and the R code.
+
+```{r}
+dyn.load(paste("beagle_wrap", .Platform$dynlib.ext, sep=""))
+source("beagle.R")
+```
+
+Define the data.
+
+```{r}
+mars <- "CCGAG-AGCAGCAATGGAT-GAGGCATGGCG"
+saturn  <- "GCGCGCAGCTGCTGTAGATGGAGGCATGACG"
+jupiter <- "GCGCGCAGCAGCTGTGGATGGAAGGATGACG"
+```
+
+Get the number of site patterns.  These could optionally be compressed.
+
+```{r}
+nPatterns <- nchar(mars)
+```
+
+Create an instance of the BEAGLE library
+
+```{r}
+returnInfo <- BeagleInstanceDetails()
+instance <- beagleCreateInstance(
+        3,  	# Number of tip data elements (input)
+				2,	        # Number of partials buffers to create (input) -- internal node count 
+				3,		# Number of compact state representation buffers to create -- for use with setTipStates (input)
+				4,		# Number of states in the continuous-time Markov chain (input) -- DNA
+				nPatterns,	# Number of site patterns to be handled by the instance (input) -- not compressed in this case
+				1,		# Number of eigen-decomposition buffers to allocate (input)
+				4,		# Number of transition matrix buffers (input) -- one per edge
+				1,		#  Number of rate categories
+				0,		# Number of scaling buffers -- can be zero if scaling is not needed
+				NULL,	 # List of potential resource on which this instance is allowed (input, NULL implies no restriction
+				0,		# Length of resourceList list (input) -- not needed to use the default hardware config
+				0,		# Bit-flags indicating preferred implementation charactertistics, see BeagleFlags (input)
+				0,		# Bit-flags indicating required implementation characteristics, see BeagleFlags (input)
+				returnInfo
+)
+```
+
+Check that instance was created.
+
+```{r}
+if(instance<0){
+  stop("Failed to obtain BEAGLE instance")
+}
+```
+
+
+I define some utility functions that map bases to integers and fill in some arrays.
+
+```{r}
+getTable <- function(){
+  l <- list()
+  l["A"] <- 0
+  l["C"] <- 1
+  l["T"] <- 2
+  l["G"] <- 3
+  l["a"] <- 0
+  l["c"] <- 1
+  l["t"] <- 2
+  l["g"] <- 3
+  l["-"] <- 4
+  l
+}
+createStates <- function(st,tab){
+  states <- new_intArray(nchar(st))
+  for(i in 1:nchar(st)){
+    # Note zero-based indexing
+    intArray_setitem(states,i-1,tab[[substr(st,i,i)]])
+  }
+  return(states)
+}
+```
+
+```{r,eval=FALSE}
+tab <- getTable()
+marsStates <- createStates(mars,tab)
+```
+
